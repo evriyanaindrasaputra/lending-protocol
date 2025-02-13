@@ -278,6 +278,24 @@ contract LendingPool {
     }
 
     /**
+     * @dev check isHealthy
+     * @param _user the address of the user
+     */
+    function _isHealthy(address _user) external view {
+        uint256 totalBorrowedAmount = 0;
+
+        for (uint256 i = 0; i < borrowings.length; i++) {
+            if (borrowings[i].borrower == _user && borrowings[i].isActive) {
+                totalBorrowedAmount += borrowings[i].borrowedAmount;
+            }
+        }
+
+        if (totalBorrowedAmount > collateralBalances[_user]) {
+            revert LendingPool__InsufficientCollateral();
+        }
+    }
+
+    /**
      * @dev get lending offers
      * @return the list of lending offers
      */
