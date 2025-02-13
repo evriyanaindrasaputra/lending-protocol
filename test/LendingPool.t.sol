@@ -1,91 +1,84 @@
-// // SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: MIT
 pragma solidity ^0.8.19;
 
 import "forge-std/Test.sol";
+import "../src/LendingPool.sol";
 
 contract LendingPoolTest is Test {
+    LendingPool public lendingPool;
+    address public lender = address(0x1);
+    address public borrower = address(0x2);
 
+    function setUp() public {
+        lendingPool = new LendingPool();
+    }
+
+    function testCreateLendingOffer() public {
+        vm.prank(lender);
+        lendingPool.createLendingOffer(100 ether, 500); // 5% interest
+
+        // Ambil data penawaran langsung menggunakan getter otomatis
+        (
+            address lenderAddr,
+            uint256 amount,
+            uint256 interestRate,
+            bool isAvailable
+        ) = lendingPool.lendingOffers(0);
+
+        assertEq(lenderAddr, lender);
+        assertEq(amount, 100 ether);
+        assertEq(interestRate, 500);
+        assertTrue(isAvailable);
+    }
+
+    function testDepositCollateral() public {
+        vm.prank(borrower);
+        lendingPool.depositCollateral(50 ether);
+        assertEq(lendingPool.collateralBalances(borrower), 50 ether);
+    }
+
+    function testBorrow() public {
+        vm.prank(lender);
+        lendingPool.createLendingOffer(100 ether, 500);
+
+        vm.prank(borrower);
+        lendingPool.depositCollateral(50 ether);
+
+        vm.prank(borrower);
+        lendingPool.borrow(0, 50 ether);
+
+        // Ambil data peminjaman menggunakan getter otomatis
+        (
+            address borrowerAddr,
+            ,
+            uint256 borrowedAmount,
+            ,
+            bool isActive
+        ) = lendingPool.borrowings(0);
+
+        assertEq(borrowerAddr, borrower);
+        assertEq(borrowedAmount, 50 ether);
+        assertTrue(isActive);
+    }
+
+    function testRepay() public {
+        vm.prank(lender);
+        lendingPool.createLendingOffer(100 ether, 500);
+
+        vm.prank(borrower);
+        lendingPool.depositCollateral(50 ether);
+
+        vm.prank(borrower);
+        lendingPool.borrow(0, 50 ether);
+
+        vm.prank(borrower);
+        lendingPool.repay(0, 50 ether);
+
+        // Ambil data peminjaman setelah repayment
+        (, , uint256 remainingBorrowedAmount, , bool isActive) = lendingPool
+            .borrowings(0);
+
+        assertFalse(isActive);
+        assertEq(remainingBorrowedAmount, 0);
+    }
 }
-// import "../src/LendingPool.sol";
-
-// contract LendingPoolTest is Test {
-//     LendingPool lendingPool;
-//     address lender = address(0x1);
-//     address borrower = address(0x2);
-
-//     function setUp() public {
-//         lendingPool = new LendingPool();
-//     }
-
-//     function testOfferLoan() public {
-//         vm.prank(lender);
-//         lendingPool.offerLoan(1000, 5);
-
-//         (
-//             address offerLender,
-//             uint256 amount,
-//             uint256 interestRate,
-//             bool active
-//         ) = lendingPool.offers(0);
-
-//         assertEq(offerLender, lender);
-//         assertEq(amount, 1000);
-//         assertEq(interestRate, 5);
-//         assertEq(active, true);
-//     }
-
-//     function testRequestLoan() public {
-//         vm.prank(borrower);
-//         lendingPool.requestLoan(500, 10);
-
-//         (
-//             address requestBorrower,
-//             uint256 amount,
-//             uint256 maxInterestRate,
-//             bool fulfilled
-//         ) = lendingPool.requests(0);
-
-//         assertEq(requestBorrower, borrower);
-//         assertEq(amount, 500);
-//         assertEq(maxInterestRate, 10);
-//         assertEq(fulfilled, false);
-//     }
-
-//     function testFulfillLoan() public {
-//         vm.prank(lender);
-//         lendingPool.offerLoan(1000, 5);
-
-//         vm.prank(borrower);
-//         lendingPool.requestLoan(500, 6);
-
-//         vm.prank(borrower);
-//         lendingPool.fulfillLoan(0, 0);
-
-//         (, , , bool active) = lendingPool.offers(0);
-//         (, , , bool fulfilled) = lendingPool.requests(0);
-
-//         assertEq(active, false);
-//         assertEq(fulfilled, true);
-//     }
-
-//     function testCannotFulfillLoan_IfInterestRateTooHigh() public {
-//         vm.prank(lender);
-//         lendingPool.offerLoan(1000, 7); // Lender memberikan bunga 7%
-
-//         vm.prank(borrower);
-//         lendingPool.requestLoan(500, 6); // Borrower hanya ingin max 6%
-
-//         vm.expectRevert(LendingPool.InterestRateTooHigh.selector);
-//         lendingPool.fulfillLoan(0, 0);
-//     }
-
-//     function testCannotOfferLoan_IfAmountZero() public {
-//         vm.expectRevert(LendingPool.InvalidAmount.selector);
-//         lendingPool.offerLoan(0, 5);
-//     }
-
-//     function testCannotRequestLoan_IfAmountZero() public {
-//         vm.expectRevert(LendingPool.InvalidAmount.selector);
-//         lendingPool.requestLoan(0, 5);
-//     }
-// }
