@@ -54,13 +54,11 @@ contract LendingPool {
 
     /**
      * @dev emitted on lending offer created
-     * @param _reserve the address of the reserve
      * @param _user the address of the lender
      * @param _amount the amount to be lended
      * @param _timestamp the timestamp of the action
      **/
     event LendingOfferCreated(
-        address indexed _reserve,
         address indexed _user,
         uint256 _amount,
         uint256 _interestRate,
@@ -153,7 +151,6 @@ contract LendingPool {
         );
 
         emit LendingOfferCreated(
-            address(this),
             msg.sender,
             _amount,
             _interestRate,
@@ -278,5 +275,25 @@ contract LendingPool {
             !borrowing.isActive
         );
         emit LenderPaid(lender, _amount);
+    }
+
+    /**
+     * @dev get lending offers
+     * @return the list of lending offers
+     */
+    function getLendingOffers() external view returns (LendingOffer[] memory) {
+        return lendingOffers;
+    }
+
+    /**
+     * @dev get borrowing offers
+     * @return the list of borrowing offers
+     */
+    function getBorrowingOffers()
+        external
+        view
+        returns (BorrowingOffer[] memory)
+    {
+        return borrowingOffers;
     }
 }
