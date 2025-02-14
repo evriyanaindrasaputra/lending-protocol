@@ -11,6 +11,8 @@ contract LendingPoolTest is Test {
 
     function setUp() public {
         lendingPool = new LendingPool();
+        vm.deal(borrower, 100 ether);
+        vm.deal(lender, 100 ether);
     }
 
     function testCreateLendingOffer() public {
@@ -62,23 +64,40 @@ contract LendingPoolTest is Test {
     }
 
     function testRepay() public {
-        vm.prank(lender);
+        vm.startPrank(lender);
         lendingPool.createLendingOffer(100 ether, 500);
+        vm.stopPrank();
 
-        vm.prank(borrower);
+        vm.startPrank(borrower);
         lendingPool.depositCollateral(50 ether);
-
-        vm.prank(borrower);
         lendingPool.borrow(0, 50 ether);
+        vm.stopPrank();
 
-        vm.prank(borrower);
-        lendingPool.repay(0, 50 ether);
+        // Periksa apakah peminjaman aktif sebelum repay
+        (, , uint256 beforeRepayment, , bool isActiveBefore) = lendingPool
+            .borrowings(0);
+        assertTrue(isActiveBefore);
+        assertEq(beforeRepayment, 50 ether);
+
+        // Simulasi repayment dengan borrower mengirim ETH
+        vm.startPrank(borrower);
+        lendingPool.repay{value: 50 ether}(0, 50 ether);
+        vm.stopPrank();
 
         // Ambil data peminjaman setelah repayment
-        (, , uint256 remainingBorrowedAmount, , bool isActive) = lendingPool
-            .borrowings(0);
+        (
+            ,
+            ,
+            uint256 remainingBorrowedAmount,
+            ,
+            bool isActiveAfter
+        ) = lendingPool.borrowings(0);
 
-        assertFalse(isActive);
+        // Pastikan borrowing sudah lunas
+        assertFalse(isActiveAfter);
         assertEq(remainingBorrowedAmount, 0);
+
+        // Periksa apakah lender menerima pembayaran
+        assertEq(lender.balance, 50 ether);
     }
 }

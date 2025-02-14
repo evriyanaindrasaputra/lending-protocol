@@ -14,6 +14,7 @@ contract LendingPool {
     error LendingPool__InvalidBorrowAmount();
     error LendingPool__BorrowingAlreadyRepaid();
     error LendingPool__RepaymentExceedsBorrowedAmount();
+    error LendingPool__IncorrectRepaymentAmount();
 
     /**
      * @dev the structure of lending offer
@@ -131,6 +132,7 @@ contract LendingPool {
      * @param _amount the amount of the collateral
      **/
     event CollateralWithdrawn(address indexed _user, uint256 _amount);
+    event BorrowingFullyRepaid(uint256 _borrowingId);
 
     modifier moreThanZero(uint256 _amount) {
         if (_amount == 0) revert LendingPool__NeedMoreThanZero();
@@ -184,7 +186,9 @@ contract LendingPool {
      * @dev deposit collateral for borrower
      * @param _amount the amount of the collateral
      **/
-    function depositCollateral(uint256 _amount) external moreThanZero(_amount) {
+    function depositCollateral(
+        uint256 _amount
+    ) external payable moreThanZero(_amount) {
         collateralBalances[msg.sender] += _amount;
 
         emit CollateralDeposited(msg.sender, _amount);
@@ -197,6 +201,9 @@ contract LendingPool {
     function withdrawCollateral(
         uint256 _amount
     ) external moreThanZero(_amount) {
+        if (collateralBalances[msg.sender] < _amount)
+            revert LendingPool__InsufficientCollateral();
+
         collateralBalances[msg.sender] -= _amount;
         emit CollateralWithdrawn(msg.sender, _amount);
     }
@@ -242,17 +249,14 @@ contract LendingPool {
         );
     }
 
-    /**
-     * @dev repay borrowing
-     * @param _borrowingId the id of borrowing
-     * @param _amount the amount of the repayment
-     **/
     function repay(
         uint256 _borrowingId,
         uint256 _amount
-    ) external moreThanZero(_amount) {
+    ) external payable moreThanZero(_amount) {
         if (_borrowingId >= borrowings.length)
             revert LendingPool__InvalidOfferID();
+        if (msg.value != _amount)
+            revert LendingPool__IncorrectRepaymentAmount();
 
         Borrowing storage borrowing = borrowings[_borrowingId];
 
@@ -260,19 +264,28 @@ contract LendingPool {
         if (_amount > borrowing.borrowedAmount)
             revert LendingPool__RepaymentExceedsBorrowedAmount();
 
+        // Kurangi borrowedAmount dengan _amount yang dibayarkan
         borrowing.borrowedAmount -= _amount;
+
+        // Jika sudah lunas, ubah status borrowing
+        bool fullyRepaid = false;
         if (borrowing.borrowedAmount == 0) {
             borrowing.isActive = false;
+            fullyRepaid = true;
+            emit BorrowingFullyRepaid(_borrowingId);
         }
 
+        // Transfer ETH ke lender
         address lender = lendingOffers[borrowing.offerId].lender;
-        payable(lender).transfer(_amount);
+        (bool success, ) = payable(lender).call{value: _amount}("");
+        require(success, "Transfer to lender failed");
+
         emit Repayment(
             _borrowingId,
             msg.sender,
             _amount,
             block.timestamp,
-            !borrowing.isActive
+            fullyRepaid
         );
         emit LenderPaid(lender, _amount);
     }
