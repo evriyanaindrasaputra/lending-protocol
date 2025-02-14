@@ -24,14 +24,14 @@ contract LendingPoolTest is Test {
         factory = new Factory();
         lendingPool = LendingPool(factory.createLendingPool(weth, usdc));
 
-        deal(weth, lender, 2e18);
+        deal(usdc, lender, 2000e6);
         deal(weth, borrower, 1e18);
     }
 
     function test_CreateLendingOffer() public {
         vm.startPrank(lender);
-        IERC20(weth).approve(address(lendingPool), 2e18);
-        lendingPool.createLendingOffer(2e18, 500); // 5% interest
+        IERC20(usdc).approve(address(lendingPool), 2000e6);
+        lendingPool.createLendingOffer(2000e6, 500); // 5% interest
         vm.stopPrank();
 
         // Ambil data penawaran langsung menggunakan getter otomatis
@@ -43,8 +43,42 @@ contract LendingPoolTest is Test {
         ) = lendingPool.lendingOffers(0);
 
         assertEq(lenderAddr, lender);
-        assertEq(amount, 2e18);
+        assertEq(amount, 2000e6);
         assertEq(interestRate, 500);
         assertTrue(isAvailable);
+    }
+
+    function test_DepositCollateral() public {
+        // Simulasi deposit collateral
+        vm.startPrank(borrower);
+        IERC20(weth).approve(address(lendingPool), 1e18);
+        lendingPool.depositCollateral(1e18);
+        vm.stopPrank();
+        assertEq(lendingPool.collateralBalances(borrower), 1e18);
+    }
+
+    function test_Borrow() public {
+        // Simulasi borrow
+        vm.startPrank(lender);
+        IERC20(usdc).approve(address(lendingPool), 2000e6);
+        lendingPool.createLendingOffer(2000e6, 500);
+        vm.stopPrank();
+
+        vm.startPrank(borrower);
+        IERC20(weth).approve(address(lendingPool), 1e18);
+        lendingPool.depositCollateral(1e18);
+        lendingPool.borrow(0, 1000e6);
+        vm.stopPrank();
+        assertEq(lendingPool.collateralBalances(borrower), 1e18);
+        // Ambil data penawaran langsung menggunakan getter otomatis
+        (
+            address borrowAddr,
+            uint256 offerId,
+            uint256 borrowedAmount,
+
+        ) = lendingPool.borrowings(0);
+        assertEq(borrowAddr, borrower);
+        assertEq(offerId, 0);
+        assertEq(borrowedAmount, 1000e6);
     }
 }

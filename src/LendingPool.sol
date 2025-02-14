@@ -44,7 +44,6 @@ contract LendingPool {
         address borrower;
         uint256 offerId;
         uint256 borrowedAmount;
-        uint256 collateralAmount;
         bool isActive;
     }
 
@@ -167,11 +166,7 @@ contract LendingPool {
         );
         collateralBalances[msg.sender] += _amount;
 
-        IERC20(collateralToken).transferFrom(
-            msg.sender,
-            address(this),
-            _amount
-        );
+        IERC20(debtToken).transferFrom(msg.sender, address(this), _amount);
         emit LendingOfferCreated(
             msg.sender,
             _amount,
@@ -263,38 +258,30 @@ contract LendingPool {
         if (collateralBalances[msg.sender] < _borrowAmount)
             revert LendingPool__InsufficientCollateral();
 
+        // Update offer
         offer.amount -= _borrowAmount;
         if (offer.amount == 0) {
             offer.isAvailable = false;
         }
 
-        IERC20(debtToken).transferFrom(
-            msg.sender,
-            address(this),
-            _borrowAmount
-        );
-        collateralBalances[msg.sender] -= _borrowAmount;
+        // Borrower menerima debt token
+        IERC20(debtToken).transfer(msg.sender, _borrowAmount);
 
-        borrowings.push(
-            Borrowing(msg.sender, _offerId, _borrowAmount, _borrowAmount, true)
-        );
-        unchecked {
-            nextBorrowingId++;
-        }
+        // Simpan data borrowing
+        borrowings.push(Borrowing(msg.sender, _offerId, _borrowAmount, true));
 
-        IERC20(collateralToken).transfer(msg.sender, _borrowAmount);
-        IERC20(debtToken).transferFrom(
-            msg.sender,
-            address(this),
-            _borrowAmount
-        );
-
+        // Emit event sebelum increment
         emit BorrowingCreated(
-            nextBorrowingId - 1,
+            nextBorrowingId,
             msg.sender,
             _offerId,
             _borrowAmount
         );
+
+        // Increment borrowing ID
+        unchecked {
+            nextBorrowingId++;
+        }
     }
 
     function repay(
