@@ -17,10 +17,9 @@ contract LendingPoolTest is Test {
     address public borrower = makeAddr("borrower");
 
     function setUp() public {
-        vm.createSelectFork(
-            "https://eth-mainnet.g.alchemy.com/v2/Qspd4Dw10PEYdY817GiO9hcbzMfNDQtf",
-            21197642
-        );
+        string memory rpcUrl = vm.envString("MAINNET_RPC_URL");
+        uint256 forkBlock = vm.envUint("FORK_BLOCK");
+        vm.createSelectFork(rpcUrl, forkBlock);
         factory = new Factory();
         lendingPool = LendingPool(factory.createLendingPool(weth, usdc));
 
