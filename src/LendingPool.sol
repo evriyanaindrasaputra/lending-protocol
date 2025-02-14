@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.19;
 
+import {IERC20} from "openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
+
 /**
  * @title LendingPool contract
  * @notice Implements the actions of the LendingPool,
@@ -50,6 +52,8 @@ contract LendingPool {
     BorrowingOffer[] public borrowingOffers;
     Borrowing[] public borrowings;
     uint256 public nextBorrowingId;
+    address public collateralToken;
+    address public debtToken;
 
     mapping(address => uint256) public collateralBalances;
 
@@ -140,6 +144,16 @@ contract LendingPool {
     }
 
     /**
+     * @dev constructor
+     * @param _collateralToken the address of the collateral token
+     * @param _debtToken the address of the debt token
+     */
+    constructor(address _collateralToken, address _debtToken) {
+        collateralToken = _collateralToken;
+        debtToken = _debtToken;
+    }
+
+    /**
      * @dev create lending offer
      * @param _amount the amount of the offer
      * @param _interestRate the interest rate of the offer
@@ -151,7 +165,13 @@ contract LendingPool {
         lendingOffers.push(
             LendingOffer(msg.sender, _amount, _interestRate, true)
         );
+        collateralBalances[msg.sender] += _amount;
 
+        IERC20(collateralToken).transferFrom(
+            msg.sender,
+            address(this),
+            _amount
+        );
         emit LendingOfferCreated(
             msg.sender,
             _amount,
@@ -172,6 +192,13 @@ contract LendingPool {
         borrowingOffers.push(
             BorrowingOffer(msg.sender, _amount, _interestRate, true)
         );
+        collateralBalances[msg.sender] += _amount;
+        IERC20(collateralToken).transferFrom(
+            msg.sender,
+            address(this),
+            _amount
+        );
+        IERC20(debtToken).transferFrom(msg.sender, address(this), _amount);
 
         emit BorrowingOfferCreated(
             address(this),
@@ -190,6 +217,11 @@ contract LendingPool {
         uint256 _amount
     ) external payable moreThanZero(_amount) {
         collateralBalances[msg.sender] += _amount;
+        IERC20(collateralToken).transferFrom(
+            msg.sender,
+            address(this),
+            _amount
+        );
 
         emit CollateralDeposited(msg.sender, _amount);
     }
@@ -205,6 +237,8 @@ contract LendingPool {
             revert LendingPool__InsufficientCollateral();
 
         collateralBalances[msg.sender] -= _amount;
+        IERC20(collateralToken).transfer(msg.sender, _amount);
+
         emit CollateralWithdrawn(msg.sender, _amount);
     }
 
@@ -234,12 +268,26 @@ contract LendingPool {
             offer.isAvailable = false;
         }
 
+        IERC20(debtToken).transferFrom(
+            msg.sender,
+            address(this),
+            _borrowAmount
+        );
+        collateralBalances[msg.sender] -= _borrowAmount;
+
         borrowings.push(
             Borrowing(msg.sender, _offerId, _borrowAmount, _borrowAmount, true)
         );
         unchecked {
             nextBorrowingId++;
         }
+
+        IERC20(collateralToken).transfer(msg.sender, _borrowAmount);
+        IERC20(debtToken).transferFrom(
+            msg.sender,
+            address(this),
+            _borrowAmount
+        );
 
         emit BorrowingCreated(
             nextBorrowingId - 1,
@@ -264,7 +312,6 @@ contract LendingPool {
         if (_amount > borrowing.borrowedAmount)
             revert LendingPool__RepaymentExceedsBorrowedAmount();
 
-        // Kurangi borrowedAmount dengan _amount yang dibayarkan
         borrowing.borrowedAmount -= _amount;
 
         // Jika sudah lunas, ubah status borrowing
@@ -278,6 +325,8 @@ contract LendingPool {
         // Transfer ETH ke lender
         address lender = lendingOffers[borrowing.offerId].lender;
         (bool success, ) = payable(lender).call{value: _amount}("");
+        IERC20(debtToken).transfer(msg.sender, _amount);
+
         require(success, "Transfer to lender failed");
 
         emit Repayment(

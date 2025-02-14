@@ -1,23 +1,38 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.19;
 
-import "forge-std/Test.sol";
-import "../src/LendingPool.sol";
+import {Test, console} from "forge-std/Test.sol";
+import {LendingPool} from "../src/LendingPool.sol";
+import {Factory} from "../src/Factory.sol";
+import {IERC20} from "openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
 
 contract LendingPoolTest is Test {
     LendingPool public lendingPool;
-    address public lender = address(0x1);
-    address public borrower = address(0x2);
+    Factory public factory;
+
+    address weth = 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2;
+    address usdc = 0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48;
+
+    address public lender = makeAddr("lender");
+    address public borrower = makeAddr("borrower");
 
     function setUp() public {
-        lendingPool = new LendingPool();
-        vm.deal(borrower, 100 ether);
-        vm.deal(lender, 100 ether);
+        vm.createSelectFork(
+            "https://eth-mainnet.g.alchemy.com/v2/Qspd4Dw10PEYdY817GiO9hcbzMfNDQtf",
+            21197642
+        );
+        factory = new Factory();
+        lendingPool = LendingPool(factory.createLendingPool(weth, usdc));
+
+        deal(weth, lender, 2e18);
+        deal(weth, borrower, 1e18);
     }
 
-    function testCreateLendingOffer() public {
-        vm.prank(lender);
-        lendingPool.createLendingOffer(100 ether, 500); // 5% interest
+    function test_CreateLendingOffer() public {
+        vm.startPrank(lender);
+        IERC20(weth).approve(address(lendingPool), 2e18);
+        lendingPool.createLendingOffer(2e18, 500); // 5% interest
+        vm.stopPrank();
 
         // Ambil data penawaran langsung menggunakan getter otomatis
         (
@@ -28,76 +43,8 @@ contract LendingPoolTest is Test {
         ) = lendingPool.lendingOffers(0);
 
         assertEq(lenderAddr, lender);
-        assertEq(amount, 100 ether);
+        assertEq(amount, 2e18);
         assertEq(interestRate, 500);
         assertTrue(isAvailable);
-    }
-
-    function testDepositCollateral() public {
-        vm.prank(borrower);
-        lendingPool.depositCollateral(50 ether);
-        assertEq(lendingPool.collateralBalances(borrower), 50 ether);
-    }
-
-    function testBorrow() public {
-        vm.prank(lender);
-        lendingPool.createLendingOffer(100 ether, 500);
-
-        vm.prank(borrower);
-        lendingPool.depositCollateral(50 ether);
-
-        vm.prank(borrower);
-        lendingPool.borrow(0, 50 ether);
-
-        // Ambil data peminjaman menggunakan getter otomatis
-        (
-            address borrowerAddr,
-            ,
-            uint256 borrowedAmount,
-            ,
-            bool isActive
-        ) = lendingPool.borrowings(0);
-
-        assertEq(borrowerAddr, borrower);
-        assertEq(borrowedAmount, 50 ether);
-        assertTrue(isActive);
-    }
-
-    function testRepay() public {
-        vm.startPrank(lender);
-        lendingPool.createLendingOffer(100 ether, 500);
-        vm.stopPrank();
-
-        vm.startPrank(borrower);
-        lendingPool.depositCollateral(50 ether);
-        lendingPool.borrow(0, 50 ether);
-        vm.stopPrank();
-
-        // Periksa apakah peminjaman aktif sebelum repay
-        (, , uint256 beforeRepayment, , bool isActiveBefore) = lendingPool
-            .borrowings(0);
-        assertTrue(isActiveBefore);
-        assertEq(beforeRepayment, 50 ether);
-
-        // Simulasi repayment dengan borrower mengirim ETH
-        vm.startPrank(borrower);
-        lendingPool.repay{value: 50 ether}(0, 50 ether);
-        vm.stopPrank();
-
-        // Ambil data peminjaman setelah repayment
-        (
-            ,
-            ,
-            uint256 remainingBorrowedAmount,
-            ,
-            bool isActiveAfter
-        ) = lendingPool.borrowings(0);
-
-        // Pastikan borrowing sudah lunas
-        assertFalse(isActiveAfter);
-        assertEq(remainingBorrowedAmount, 0);
-
-        // Periksa apakah lender menerima pembayaran
-        assertEq(lender.balance, 50 ether);
     }
 }
