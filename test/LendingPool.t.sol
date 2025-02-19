@@ -23,8 +23,8 @@ contract LendingPoolTest is Test {
         factory = new Factory();
         lendingPool = LendingPool(factory.createLendingPool(weth, usdc));
 
-        deal(usdc, lender, 2000e6);
-        deal(weth, borrower, 1e18);
+        deal(usdc, lender, 3000e6);
+        deal(weth, borrower, 2e18);
     }
 
     function test_CreateLendingOffer() public {
@@ -52,6 +52,11 @@ contract LendingPoolTest is Test {
         vm.startPrank(borrower);
         IERC20(weth).approve(address(lendingPool), 1e18);
         lendingPool.depositCollateral(1e18);
+        console.log(
+            "ETH balance in contract:",
+            IERC20(weth).balanceOf(address(lendingPool))
+        );
+
         vm.stopPrank();
         assertEq(lendingPool.collateralBalances(borrower), 1e18);
     }
@@ -66,7 +71,7 @@ contract LendingPoolTest is Test {
         vm.startPrank(borrower);
         IERC20(weth).approve(address(lendingPool), 1e18);
         lendingPool.depositCollateral(1e18);
-        lendingPool.borrow(0, 1000e6);
+        lendingPool.borrow(0, 1500e6);
         vm.stopPrank();
         assertEq(lendingPool.collateralBalances(borrower), 1e18);
         // Ambil data penawaran langsung menggunakan getter otomatis
@@ -76,8 +81,63 @@ contract LendingPoolTest is Test {
             uint256 borrowedAmount,
 
         ) = lendingPool.borrowings(0);
+        console.log(
+            "ETH balance in contract:",
+            IERC20(weth).balanceOf(address(lendingPool))
+        );
+        console.log(
+            "USDC balance in contract:",
+            IERC20(usdc).balanceOf(address(lendingPool))
+        );
+        console.log(
+            "USDC balance in borrower:",
+            IERC20(usdc).balanceOf(address(borrower))
+        );
         assertEq(borrowAddr, borrower);
         assertEq(offerId, 0);
-        assertEq(borrowedAmount, 1000e6);
+        assertEq(borrowedAmount, 1500e6);
+    }
+
+    function test_repay() public {
+        // Simulasi borrow
+        vm.startPrank(lender);
+        IERC20(usdc).approve(address(lendingPool), 2000e6);
+        lendingPool.createLendingOffer(2000e6, 500);
+        console.log(
+            "USDC balance in contract:",
+            IERC20(usdc).balanceOf(address(lendingPool))
+        );
+        vm.stopPrank();
+
+        vm.startPrank(borrower);
+        IERC20(weth).approve(address(lendingPool), 1e18);
+        lendingPool.depositCollateral(1e18);
+        console.log(
+            "WETH balance in contract:",
+            IERC20(weth).balanceOf(address(lendingPool))
+        );
+        lendingPool.borrow(0, 1000e6);
+        console.log(
+            "USDC balance in contract: after borrow",
+            IERC20(usdc).balanceOf(address(lendingPool))
+        );
+        console.log(
+            "WETH balance in contract: after borrow",
+            IERC20(weth).balanceOf(address(lendingPool))
+        );
+        vm.stopPrank();
+
+        vm.startPrank(borrower);
+        console.log(
+            "USDC balance in borrower: before repay",
+            IERC20(usdc).balanceOf(address(borrower))
+        );
+        IERC20(usdc).approve(address(lendingPool), 1000e6);
+        lendingPool.repay(0, 1000e6);
+        console.log(
+            "USDC balance in contract: after repay",
+            IERC20(usdc).balanceOf(address(lendingPool))
+        );
+        vm.stopPrank();
     }
 }

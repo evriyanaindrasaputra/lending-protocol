@@ -16,7 +16,6 @@ contract LendingPool {
     error LendingPool__InvalidBorrowAmount();
     error LendingPool__BorrowingAlreadyRepaid();
     error LendingPool__RepaymentExceedsBorrowedAmount();
-    error LendingPool__IncorrectRepaymentAmount();
 
     /**
      * @dev the structure of lending offer
@@ -161,12 +160,19 @@ contract LendingPool {
         uint256 _amount,
         uint256 _interestRate
     ) external moreThanZero(_amount) moreThanZero(_interestRate) {
+        require(
+            IERC20(debtToken).allowance(msg.sender, address(this)) >= _amount,
+            "Insufficient allowance"
+        );
+
+        // Simpan lending offer
         lendingOffers.push(
             LendingOffer(msg.sender, _amount, _interestRate, true)
         );
-        collateralBalances[msg.sender] += _amount;
 
+        // Transfer dana ke kontrak
         IERC20(debtToken).transferFrom(msg.sender, address(this), _amount);
+
         emit LendingOfferCreated(
             msg.sender,
             _amount,
@@ -290,8 +296,6 @@ contract LendingPool {
     ) external payable moreThanZero(_amount) {
         if (_borrowingId >= borrowings.length)
             revert LendingPool__InvalidOfferID();
-        if (msg.value != _amount)
-            revert LendingPool__IncorrectRepaymentAmount();
 
         Borrowing storage borrowing = borrowings[_borrowingId];
 
@@ -309,12 +313,7 @@ contract LendingPool {
             emit BorrowingFullyRepaid(_borrowingId);
         }
 
-        // Transfer ETH ke lender
-        address lender = lendingOffers[borrowing.offerId].lender;
-        (bool success, ) = payable(lender).call{value: _amount}("");
-        IERC20(debtToken).transfer(msg.sender, _amount);
-
-        require(success, "Transfer to lender failed");
+        IERC20(debtToken).transferFrom(msg.sender, address(this), _amount);
 
         emit Repayment(
             _borrowingId,
@@ -323,7 +322,6 @@ contract LendingPool {
             block.timestamp,
             fullyRepaid
         );
-        emit LenderPaid(lender, _amount);
     }
 
     /**
